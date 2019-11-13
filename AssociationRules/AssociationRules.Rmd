@@ -1,0 +1,557 @@
+---
+title: "ASSOCIATION RULES"
+subtitle: "Frequent itemset, Association Rules"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+author: Eduardo Moreno Ortigosa, 
+        Illinois Institute of Technology
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## EXERCISE 1. Association Analysis on a Bakery dataset.
+
+```{r}
+rm(list=ls())
+
+directory <- getwd()
+setwd(directory)
+```
+
+### Canonical representation of the transaction file.
+
+#### Reading the datasets, storing them into each dataframe inside a list.
+
+```{r}
+df.tr <- list()
+name.tr <- c("tr-1k.csv","tr-5k.csv","tr-20k.csv","tr-75k.csv")
+
+for(i in 1:4){
+  df.tr[[i]] <- read.csv(name.tr[i], header=FALSE, fill = TRUE, 
+                   col.names = c("ID","P1","P2","P3","P4","P5","P6","P7","P8"))
+}
+
+df.products <- read.csv("products.csv", header = FALSE,
+                        col.names = c("ProductID","Productname"))
+
+dim(df.tr[[2]])
+```
+
+#### Creating the datatframes to store each variable.
+
+```{r}
+new.tr <- list()
+num.tr <- c(1000, 5000, 20000, 75000)
+
+for (i in 1:4){
+  new.tr[[i]] <- data.frame("ID"=1:num.tr[i])
+}
+
+dim(new.tr[[3]])
+```
+
+#### Creating the canonical representation.
+
+Since the column "ID" is equal to the index of the dataframe, it can be removed in order to assign a product name according to the product ID provided in the proudct dataset.
+
+```{r}
+for (i in 1:4){
+  for (j in 1:ncol(df.tr[[i]])){
+    product.col <- df.products$Productname[match(df.tr[[i]][,j], df.products$ProductID)]
+    new.tr[[i]] <- cbind(new.tr[[i]], product.col)
+  }
+  new.tr[[i]] <-new.tr[[i]][,-1] #Removing column ID
+}
+
+dim(new.tr[[1]])
+```
+
+Note that for this case, it is created a dataframe with correct item names, nevertheless the rows starting by the 50th row have been displaced to the right, this is due to it has been matched he products ID (with a value between 1 to 50) with the correct item dataframe.
+
+In order to solve that problem, the first column must be removed.
+
+```{r}
+for (i in 1:4){
+  new.tr[[i]] <- new.tr[[i]][, -1]
+}
+```
+
+
+#### Writing the new transaction file.
+
+```{r}
+new.name <- c("tr-1k-canonical.csv", "tr-5k-canonical.csv",
+              "tr-20k-canonical.csv", "tr-75k-canonical.csv")
+
+for (i in 1:4){
+  write.table(new.tr[[i]], file=new.name[i], sep =',',row.names = FALSE, col.names = FALSE, na='')
+}
+```
+
+### Finding association rules.
+
+First, the package that would be used is the "arules" for studying the association rules. In order to find association rules, there are two steps.
+1. Finding frequents itemsets: finding all items that satisfied the minimum support threeshold.
+2. Extract high confidence rules from the frequent itemsets.
+
+```{r}
+library("arules")
+library("arulesViz")
+
+#install.packages("arulesViz")
+```
+
+To get good conclusions, I decided to explore the first dataset manually, the datatset of 1k transactions. Then a for loop can be runned and each desired value stored in a list to create a more general model.
+
+### Case 1. One single transactions dataset (1k).
+
+```{r}
+trans <- read.transactions("tr-1k-canonical.csv", sep=",",header = FALSE)
+summary(trans)
+```
+
+```{r}
+inspect(trans[1:5])
+```
+
+#### Frequent itemsets.
+
+An itemset is frequent if the support of that itemset is greater or equal than the minimum support, with minimum support being a specififc threshold.
+I this case, the minimum support would be 0.1 which must be defined in the apriori function.
+
+In order to generate the frequent itemsets with a particular support:
+
+```{r}
+freq.itset <- apriori(trans, parameter=list(support=0.1, target="frequent itemsets"))
+```
+
+The result comes up with only 3 sets of items. It seems to be low number of itemsets, now this hypothesis will be proved by running aprior algorithm (which would lead into 0 or at most 1 association rules).
+
+```{r}
+inspect(sort(freq.itset, decreasing = T, by="count"))
+rm(freq.itset)
+```
+
+The frequent itemsets are shown in the previous result. The first column correspons to the frequent itemsets, the second to the support of each itemset and finally the total number of each itemset counted.
+
+Now, to visualize those 10 itemset obtained:
+
+```{r}
+itemFrequencyPlot(trans, support = 0.1)
+image(trans)
+```
+
+After that, it is runned the apriori algorithm (it should be taken into account that the minsup chosen is too high).
+
+```{r}
+rules <- apriori(trans)
+rm(rules)
+```
+
+For this case, with a minsup of 0.1, it has been gotten 0 rules. As it said, this is due to the high minsup value chosen.
+In order to create association rules, this factor must be reduced. Now it would be reduced by 10 times the original value, minsup = 0.01.
+
+```{r}
+freq.itset <- apriori(trans, parameter=list(support=0.01, target="frequent itemsets"))
+inspect(sort(freq.itset, decreasing = T, by="count"))
+rm(freq.itset)
+
+itemFrequencyPlot(trans, support = 0.01)
+image(trans)
+```
+
+Now it is possible to see that the total number of frequent itemset has been increased from 3 to 132 itemsets.
+The new frequent itemset with minsup of 0.01 will include the other 3 frequent itemsets with a minsup value of 0.1 with a confidence range value of 0.5
+
+```{r}
+rules <- apriori(trans, parameter = list(support=0.01, conf=0.5))
+summary(rules)
+```
+
+By reducing the minsup value, a total number of 124 rules are found. This number is high enough to consider a high enough frequent itemsets found for a minsup threshold satisfied.
+
+### Extract high confidence rules from the frequent itemsets.
+
+Now in order to get strong rules from the frequent itemset, it should be inspected those rules by sorting by confidence.
+It shown the head of rules, that is, a total of 6 rules inspected by confidence.
+
+```{r}
+inspect(head(rules, by="confidence"))
+```
+
+```{r}
+rules.sort.support <- sort(rules, by="support")
+rules.sort.lift <- sort(rules, by="lift")
+```
+
+Note that all of the lift values are greater than 1. The lift can be interpreted as how many times the number of transactions that contains the antecedent and consequent is higher than the estimated probability.
+Since all lifts are greater than 1, that means that the antecedent and consequent appear more often together than expected. The occurrence of the antecedent will have a positive effect on the occurrence of the consequent.
+
+However, it will be chosen those rules which support level is the highest because it is looked for the items that many people are buying.
+
+The top 3 association rules by support level are:
+
+```{r}
+inspect(head(rules.sort.support,3))
+```
+
+It looks that in some rules, the antecedent and consequent can be the same by changing the values in (small changes) in support and confidence. The lift remains unchanged.
+
+Now let's try to remove those duplicated rules:
+
+```{r}
+new.rules <- rules[!duplicated(generatingItemsets(rules))]
+
+new.rules.sort.support <- sort(new.rules, by="support")
+new.rules.sort.lift <- sort(new.rules, by="lift")
+new.rules.sort.confi <- sort(new.rules, by="confidence")
+```
+
+And then studying the new rules created without duplicated itemsets:
+
+```{r}
+inspect(new.rules.sort.lift)
+```
+
+All the duplicates have been removed (a total number of 82 rules) and thereupon, the top 3 association rules by support are:
+
+```{r}
+inspect(head(new.rules.sort.support,3))
+```
+
+Those rules which have the highest confidence value of 1, that is, the customers will buy the consequent if they buy the antecedent are:
+
+```{r}
+inspect(head(new.rules.sort.confi,10))
+```
+
+
+They are the first 10 rules, taking those which have the highest support value results in rules 9, 10 and 7.
+
+Same conclusions could be drawn by visualizing the new rules, they are plotted as follows:
+
+```{r}
+plot(new.rules, engine="htmlwidget")
+```
+
+The y axes represent the confidence of the rule and the x axis the support level.
+
+#### Conclusions
+
+**Highest support level**
+
+In conclusion, the itemsets with highest support level, which has a good confidence level, between 0.53 and 0.58 (since it is close to 0.5, the number of customers who buy the antecedent and consequent will be the same as the customer who buy the antecedent and do not buy the consequent) are:
+
+```{r}
+cat("The top 3 items selected are those which have highest support level:", "\n")
+cat("{Truffle Cake} => {Gongolais Cookie}", "\n")
+cat("{Marzipan Cookie} => {Truile Cookie}", "\n")
+cat("{Strawberry Cake} => {Napoleon Cake}", "\n")
+```
+
+Therefore, a good recommendation for the shoper should be selling those items in "packs" like a special offer pack if both items are bought.
+Or maybe getting free the consequent item if a certain quantity of antecedent items are bought.
+The last and more obvious ation that the shoper can do is by placing those items together to sell more of them.
+
+By these reasons:
+For example, Truffle Cake and Gongolais Cookie can be sold together for less money than buying them by separate.
+Another example, getting by free tuile cookie if 10 Marzipan Cookies are bought.
+Finally, if Strawberry Cake and Napoleon Cake are placed together, the client would have more possibilities of buying both of them (due to the association rule which states that Napoleon Cake is consequent of Strawberry Cake)
+
+**Highest confidence**
+
+The itemsets with highest confidence level of 1, which have the highest support level among them (support between 0.40 and 0.31), the customers due to a confidence of 1 (or close to 1) will buy the consequent if buying the antecedent are:
+
+```{r}
+cat("The top 3 items selected are those which have highest confidence level:", "\n")
+cat("{Apple Danish, Apple Tart} => {Apple Croissant}", "\n")
+cat("{Apricot Danish, Opera Cake} => {Cherry Tart}", "\n")
+cat("{Apple Danish, Apple Tart, Cherry Soda} => {Apple Croissant}", "\n")
+```
+
+Same conclusions can be drawn as the support conclusions, the shoper should place the items next to them or making special offers for the itemsets.
+
+0.040 - 0.31
+
+Note that the apriori principle is fulfill, the itemset of the rule 7 is frequent then its subset must be frequent too (the rule 9).
+
+```{r}
+cat("Rule 7 with support of 0.31","\n")
+cat("{Apple Danish, Apple Tart, Cherry Soda} => {Apple Croissant}", "\n", "\n")
+cat("Rule 9 with support of 0.40","\n")
+cat("{Apple Danish, Apple Tart} => {Apple Croissant}", "\n")
+```
+
+**Minsup values**
+
+Note that it can be tried more lower minsup values, however this performance can lead into an overload information, it will be too many frequent itemsets and too many spurious rules.
+
+### Case 2. General model of all datasets.
+
+The general model for all the 4 datatsets will begin with a specific minsup value and confidence value for all of them.
+Further conclusions will be drawn once the analysis is completed.
+
+#### Reading the transactions of each dataset.
+
+```{r}
+trans.list <- list()
+trans.name <- c("tr-1k-canonical.csv", "tr-5k-canonical.csv",
+                "tr-20k-canonical.csv", "tr-75k-canonical.csv")
+for (i in 1:4){
+  trans.list[[i]] <- read.transactions(trans.name[i], sep=",",header = FALSE)
+}
+
+```
+
+#### Frequent itemsets of each transaction dataset.
+
+In order to study the frequent itemsets of each transaction, same way would be followed to obtain conclusion; first starting with a high minsup value and then moving on a lower one.
+
+**1K TRANSACTION DATASET**
+```{r}
+freq.itset.1k <- apriori(trans.list[[1]], parameter=list(support=0.1, target="frequent itemsets"))
+inspect(sort(freq.itset.1k, decreasing = T, by="count"))
+rm(freq.itset.1k)
+
+itemFrequencyPlot(trans.list[[1]], support = 0.1)
+image(trans.list[[1]])
+```
+
+This results are the same that obtained in previous section for 1k transaction.
+
+**5K TRANSACTION DATASET**
+
+```{r}
+freq.itset.5k <- apriori(trans.list[[2]], parameter=list(support=0.1, target="frequent itemsets"))
+inspect(sort(freq.itset.5k, decreasing = T, by="count"))
+rm(freq.itset.5k)
+
+itemFrequencyPlot(trans.list[[2]], support = 0.1)
+image(trans.list[[2]])
+```
+
+For this case where it exists 5k transactions, for the same minsup vlue of 0.1 the total number of itemsets is lower than the 1k transaction dataset.
+
+**20K TRANSACTION DATASET**
+
+```{r}
+freq.itset.20k <- apriori(trans.list[[3]], parameter=list(support=0.1, target="frequent itemsets"))
+inspect(sort(freq.itset.20k, decreasing = T, by="count"))
+rm(freq.itset.20k)
+
+itemFrequencyPlot(trans.list[[3]], support = 0.1)
+image(trans.list[[3]])
+```
+
+For this case, same sets are found than in 5k transaction dataset.
+
+**75K TRANSACTION DATASET**
+
+```{r}
+freq.itset.75k <- apriori(trans.list[[4]], parameter=list(support=0.1, target="frequent itemsets"))
+inspect(sort(freq.itset.75k, decreasing = T, by="count"))
+rm(freq.itset.75k)
+
+itemFrequencyPlot(trans.list[[4]], support = 0.1)
+image(trans.list[[4]])
+```
+
+Finally, the number of itemsets for 75k transaction is 1 more than previous 5k and 20k transactions dataset. The sets are the same than the previous one with exception of Tuile Cookie.
+
+#### First conclusions with high minsup value.
+
+It seems that for the 5k transaction dataset it has been added high quantity of types of Coffee because the most frequent items change from the 3 sets of 1k transactions:
+
+- Gongolais Cookie
+- Truffle Cake 
+- Tuile Cookie
+
+To the most frequent items:
+
+-Coffee Eclair
+-Hot Coffee
+
+The number of those frequent items is increased in each dataset. It means that the customers still continue to buying coffee until the 75k transcation datatset where the Tuile Cookie is another frequent item.
+
+Note that this value of minsup is high and thus, it may prove to be erroneous in comparison of datasets. Remark that this is a first approach in order to stablish a logical way of getting conclusions (starting by a high minsup value and moving to lower minsup value).
+
+#### Frequent itemsets of each transaction dataset with lower minsup (0.01)
+
+**1K TRANSACTION DATASET**
+```{r}
+freq.itset.1k <- apriori(trans.list[[1]], parameter=list(support=0.01, target="frequent itemsets"))
+inspect(sort(freq.itset.1k, decreasing = T, by="count"))
+rm(freq.itset.1k)
+
+itemFrequencyPlot(trans.list[[1]], support = 0.01)
+image(trans.list[[1]])
+```
+
+**5K TRANSACTION DATASET**
+
+```{r}
+freq.itset.5k <- apriori(trans.list[[2]], parameter=list(support=0.01, target="frequent itemsets"))
+inspect(sort(freq.itset.5k, decreasing = T, by="count"))
+rm(freq.itset.5k)
+
+itemFrequencyPlot(trans.list[[2]], support = 0.01)
+image(trans.list[[2]])
+```
+
+**20K TRANSACTION DATASET**
+
+```{r}
+freq.itset.20k <- apriori(trans.list[[3]], parameter=list(support=0.01, target="frequent itemsets"))
+inspect(sort(freq.itset.20k, decreasing = T, by="count"))
+rm(freq.itset.20k)
+
+itemFrequencyPlot(trans.list[[3]], support = 0.01)
+image(trans.list[[3]])
+```
+
+**75K TRANSACTION DATASET**
+
+```{r}
+freq.itset.75k <- apriori(trans.list[[4]], parameter=list(support=0.01, target="frequent itemsets"))
+inspect(sort(freq.itset.75k, decreasing = T, by="count"))
+rm(freq.itset.75k)
+
+itemFrequencyPlot(trans.list[[4]], support = 0.01)
+image(trans.list[[4]])
+```
+
+#### Conclusions of frequent items with minsup value of 0.01
+
+The conclusion drawn is that there are more rules for the transaction dataset of 1K (a total number of 132) than for the rest of transaction dataset (a total number of 124).
+
+#### Creating rules.
+
+Since better results are obtained by reducing the minsup value to 0.01, the rules would be created with that value:
+
+**1K TRANSACTION DATASET**
+
+```{r}
+rules.1 <- apriori(trans.list[[1]], parameter = list(support=0.01, conf=0.5))
+
+# Removing the duplicated rules
+new.rules.1 <- rules.1[!duplicated(generatingItemsets(rules.1))]
+summary(new.rules.1)
+
+new.rules.1.sort.support <- sort(new.rules.1, by="support")
+new.rules.1.sort.lift <- sort(new.rules.1, by="lift")
+new.rules.1.sort.confi <- sort(new.rules.1, by="confidence")
+```
+
+**5K TRANSACTION DATASET**
+
+```{r}
+rules.5 <- apriori(trans.list[[2]], parameter = list(support=0.01, conf=0.5))
+
+# Removing the duplicated rules
+new.rules.5 <- rules.5[!duplicated(generatingItemsets(rules.5))]
+summary(new.rules.5)
+
+new.rules.5.sort.support <- sort(new.rules.5, by="support")
+new.rules.5.sort.lift <- sort(new.rules.5, by="lift")
+new.rules.5.sort.confi <- sort(new.rules.5, by="confidence")
+```
+
+**20K TRANSACTION DATASET**
+
+```{r}
+rules.20 <- apriori(trans.list[[3]], parameter = list(support=0.01, conf=0.5))
+
+# Removing the duplicated rules
+new.rules.20 <- rules.20[!duplicated(generatingItemsets(rules.20))]
+summary(new.rules.20)
+
+new.rules.20.sort.support <- sort(new.rules.20, by="support")
+new.rules.20.sort.lift <- sort(new.rules.20, by="lift")
+new.rules.20.sort.confi <- sort(new.rules.20, by="confidence")
+```
+
+**75K TRANSACTION DATASET**
+
+```{r}
+rules.75 <- apriori(trans.list[[4]], parameter = list(support=0.01, conf=0.5))
+
+# Removing the duplicated rules
+new.rules.75 <- rules.75[!duplicated(generatingItemsets(rules.75))]
+summary(new.rules.75)
+
+new.rules.75.sort.support <- sort(new.rules.75, by="support")
+new.rules.75.sort.lift <- sort(new.rules.75, by="lift")
+new.rules.75.sort.confi <- sort(new.rules.75, by="confidence")
+```
+
+#### Visualizing rules.
+
+```{r}
+plot(new.rules.1, engine="htmlwidget")
+plot(new.rules.5, engine="htmlwidget")
+plot(new.rules.20, engine="htmlwidget")
+plot(new.rules.75, engine="htmlwidget")
+```
+
+### Comparing rules.
+
+The main conclusions that can be drawn in relation to number, support and confidence are as follows:
+
+**RULES**
+
+The total number of rules (after removing duplicates) hardly varies. The total number of rules for a minsup of 0.01 and a confidence of 0.5 is:
+
+For 1K transaction dataset: 47 association rules.
+For 5K transaction dataset: 42 association rules.
+For 20K transaction dataset: 41 association rules.
+For 75K transaction dataset: 41 association rules.
+
+**CONFIDENCE**
+
+With respect to the confidence, by using visual analysis, it is concluded that the rules are grouped into specific confidence values as the number of transactions increases. 
+
+This means that for the 1k dataset the rules are widely scattered in diferent confidence values. However at the other exreme of 75k transactions, the rules with highest lift value are grouped in confidence values between 0.9 and 1 meanwhile those rules with lowest lift value in confidence values between 0.5 and 0.6
+
+That statetment makes sense because the more transactions are input in the dataset, the confidence of the condition of the consequent is complied with the antecedent (or not), tends to a specific value.
+
+**SUPPORT LEVEL**
+
+Regarding to the support level, as mentioned above, as the number of transactions increases, the rules are grouped into specific confidence values and then, it is observed that the values with highest lift are grouped in small support values (for higher number of transactions).
+
+In this case for 1k transactions, the support values are widely scattered. 
+For 75k transactions the support values for the highest lift values are grouped between 0.02 and 0.03 and the support values for lowest lift values between 0.04 and 0.05
+
+### Some Questions for 75K dataset
+
+```{r}
+new.rules.75.sort.support <- sort(new.rules.75, by="support")
+```
+
+#### Most frequently purchased item or itemset?
+
+The most frequently purchased item with a support level of 0.053 and a confidence of 0.574 (higher enough to consider the rule) is:
+
+```{r}
+inspect(head(new.rules.75.sort.support,1))
+```
+
+```{r}
+cat("{Apricot Danish} => {Cherry Tart}")
+```
+
+#### Least frequently purchased item or itemset?
+
+The least frequently purchased itemset with a support level of 0.02 and a confidence of 0.99 (the condition will always be fulfilled) is:
+
+```{r}
+inspect(tail(new.rules.75.sort.support,1))
+```
+
+```{r}
+cat("{Apple croissant, Apple Danish, Cherry Soda} => {Apple Tart}")
+```
+

@@ -1,0 +1,284 @@
+---
+title: "Clustering"
+subtitle: "K-means, Cluster Analysis"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+author: Eduardo Moreno Ortigosa, 
+        Illinois Institute of Technology
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## EXERCISE 1. Clustering on a movie review users dataset.
+
+```{r}
+rm(list=ls())
+
+set.seed("123")
+```
+
+### Reading the Buddy Movie dataset
+
+```{r}
+b.movie <- read.csv("buddymove_holidayiq.csv")
+b.movie[28,]
+
+head(b.movie)
+```
+
+### Exploratory Data Analysis
+
+My first step of the exploratory analysis would be suming up all the ratings that each user review since it could be the case where it is an active user who rates a lot of times and however, one topic for that user that can be not interesting enought is highly interesting for other user who rates less times.
+Along with that, it could be the case where the number of ratings for a specific topic can be higher than the number of ratings of other topic.
+
+Analyzing all previous statements, starting by the columns:
+
+```{r}
+apply(b.movie[,-1], 2, mean)
+```
+
+The first conclusion that can be drawn is that the average number of ratings for Sports is much lower than the rest of the topics. 
+It makes sense thinking that the number of ratings is higher for, for example Nature, due to maybe there are more Nature movies or users that rate more time interesting in Nature movies in the dataset.
+
+In order to analyze the variances of each column, it should come up with different variances between them too.
+
+```{r}
+apply(b.movie[,-1], 2, var)
+```
+
+Again, the variance of sports is far away from the other movie topics. However, it is possible to see that the some topics such as "Nature" or "Shopping" are almost twice the variance value of the topics "Religious", "Theatre" and "Picnic".
+
+Now for each user, it is possible to see the number of ratings as an average value (the total number of ratings divided by the topics of the dataset).
+
+With "apply" function given the dataset of Buddy Movies and the second parameter set to 1 (in order to obtain an analysis by rows), it leads to:
+
+```{r}
+boxplot(apply(b.movie[,-1],1,mean))
+```
+
+From the previous boxplot it is possible to draw some conclusions for each user of the dataset:
+
+```{r}
+sprintf("The minimum average number of ratings for some user is %f and the maximum average number of ratings for another user is %f", min(apply(b.movie[,-1],1,mean)),max(apply(b.movie[,-1],1,mean)))
+```
+
+Therefore, it can be concluded that there is an average number of ratings per user between 59 and 141 ratings.
+
+#### Conclusions of the EDA
+
+Since there is a big difference of values between some columns, the data must be scaled previous to perform the K-means algorithm.
+If not, by performing the algorithm it would yield in that the most of the components of the PCA that are observed would be caused by "Nature" and "Shopping" since they have the largest mean and variance.
+
+### Scaling the dataset.
+
+In order to scale the dataset, it is used the "scaled" function. Note that the locations of the points in a N-space does not change even after scaling, that is, it consists on adjusting the coordinates.
+
+```{r}
+b.movie.scaled <- scale(b.movie[,-1])
+```
+
+By comparing both of them, the previous unscaled dataset and the dataset after scaling, for the two features "Sport" which was problematic and "Nature" which was the one with the largest mean and variance.
+
+```{r}
+b.movie <- b.movie[,-1]
+
+# MEAN
+apply(b.movie, 2, mean)
+apply(b.movie.scaled, 2, mean)
+
+cat("\n")
+
+# VARIANCE
+apply(b.movie, 2, var)
+apply(b.movie.scaled, 2, var)
+```
+
+It is proven that the data now is scaled since the mean is equal to zero and the variance has a value of 1 for both variables.
+
+### Determine the optimum number of clusters.
+
+```{r}
+library("cluster")
+library("ggplot2")
+library("factoextra")
+```
+
+In order to determine the number of clusters, it would be used the "fviz_nbclust()" function. Note that since there are more than 2 dimensions in the data, the function will run a PCA in the dataset. 
+
+```{r}
+cluster.nb <- fviz_nbclust(b.movie.scaled[,1:6], kmeans, method="wss")
+cluster.nb
+```
+
+The resulting elbow helps to choose the number of optimal clusters. There is not a highly rapid decrease in the SSE. The number of clusyers would be the value of "k" for which the SSE is minimal but without a large number of clusters k to avoid overspliting.
+At first approach, it looks like the SSE is minimum and constant from k=7.
+
+To check in which cluster the SSE becomes more stable (constant) by getting the values of SSE for each number k:
+
+```{r}
+cluster.nb$data
+```
+
+Therefore, an optimal number of cluster could be 7, 8 or 9 clusters.
+
+### K-means clustering for optimal number of clusters.
+
+It would be analyzed the clustering for 3 different number (k= 7, 8 and 9) of clusters as follows:
+
+```{r}
+set.seed("123")
+kmeans.7 <- kmeans(b.movie.scaled, centers = 7, nstart = 50)
+kmeans.8 <- kmeans(b.movie.scaled, centers = 8, nstart = 50)
+kmeans.9 <- kmeans(b.movie.scaled, centers = 9, nstart = 50)
+```
+
+```{r}
+set.seed("123")
+clust.7 <- fviz_cluster(kmeans.7, data=b.movie.scaled[,1:6])
+clust.8 <- fviz_cluster(kmeans.8, data=b.movie.scaled[,1:6])
+clust.9 <- fviz_cluster(kmeans.9, data=b.movie.scaled[,1:6])
+```
+
+And visualizing those clusters:
+
+```{r}
+clust.7
+clust.8
+clust.9
+```
+
+Note that the PCA selects two components, the first one has the largest variance and the second one turns to have the highest variance possible but being orthogonal to the first component.
+
+The first component is Dim1, x axis, with 54.6% of the total variance and dim2, y axis, with 28,1%.
+
+In conclusion, the chosen number of clusters would be 8 since it has an almost minimum and constant SSE and it is not oversplit.
+
+### Number of observations in each cluster.
+
+By using a number of 8 clusters, the observations in each cluster can be obtained as follows:
+
+```{r}
+numb <- c()
+for (i in 1:8){
+  numb[i] <- length(which(clust.8$data[,"cluster"]==i))
+}
+
+numb.sort <- sort(numb,decreasing = TRUE)
+print(numb.sort)
+```
+
+Now printing the observation for each cluster.
+
+```{r}
+post <- c()
+prev <- c()
+for (i in 1:8) {
+  if (i>1){
+    post <- which(numb.sort[i]==numb)
+    prev <- which(numb.sort[i-1]==numb)
+  }
+  if ((length(post)-length(prev))!=1){
+    cat("Number of observations in cluster #", which(numb.sort[i]==numb)
+      , ": ", numb.sort[i], "\n")}
+}
+```
+
+Note that the largest cluster has 66 observation which is almost twice the number of observtions of the second largest cluster.
+
+### Total SSE of the clusters.
+
+The total SSE of the clusters is given by:
+
+```{r}
+set.seed("123")
+#kmeans.8 <- kmeans(b.movie.scaled, centers = 8, nstart = 50)
+tot.SSE <- kmeans.8$tot.withinss
+
+cat("The total SSE of the cluster is: ", tot.SSE)
+```
+
+
+### Total SSE of each cluster.
+
+And the total SSE for each cluster is:
+
+```{r}
+set.seed("123")
+each.SSE <- kmeans.8$withinss
+
+for (i in 1:8) {
+  if (i>1){
+    post <- which(numb.sort[i]==numb)
+    prev <- which(numb.sort[i-1]==numb)
+  }
+  if ((length(post)-length(prev))!=1){
+    cat("The SSE in cluster #", which(numb.sort[i]==numb)
+      , ": ", each.SSE[i], "\n")}
+}
+```
+
+### Analysis of clusters. Conclusions.
+
+```{r}
+clust.8
+```
+
+In order to analyze each cluster, it would be necessary to divide into one dataset per cluster and make some exloratory data analysis of those new dataframes.
+
+```{r}
+clust.list.scaled <- list()
+for (i in 1:8){
+  clust.list.scaled[[i]] <- b.movie.scaled[which(kmeans.8$cluster == i),]
+}
+```
+
+First of all, note that the 2 variables created with PCA has a total of 54,6 + 28,1% of the variance of the model.
+Since, it is higly enough to consider that both variables takes most of the information of the model and the conclusions drawn can be applied to the entire dataset.
+
+Therefore, it could be concluded how the users are grouped by several analysis on the dataset per cluster created.
+
+Now analyzing each dataset, by using the boxplot function, those with the smallest IQR would means that the users of that cluster rates practically the same value.
+Those users who rates less times would have a scaled "y" value negative.
+
+```{r}
+for (i in 1:8){
+  boxplot(clust.list.scaled[[i]], ylim = c(-2,3), main = which(numb.sort[i]==numb))
+}
+```
+
+Note that the tittle of each boxplot correspond with the number of cluster of the colored picture of clustes.
+
+Taking into account those clusters, it can be inferred that:
+
+First, there are 4 well differentiated clusters (2 on the top, 1 on the left and the one from the bottom): Clusters 2, 3, 4 and 6. 
+
+The other 4 clusters may result difficult to analyze since they are overlapped between them.
+
+**Cluster 1**
+In the cluster number 1 (corresponded with boxplot 2), has a small number of ratings in "Nature" and large number (related with values of that cluster) of "Religious" and "Shopping".
+Therefore, poeple who do not like "Nature" topic may like "Religious" and "Shopping", or maybe people who like "Religious" topic like "Shopping" too.
+
+**Cluster 2 and 8**
+There is the same SSE for both clusters and the results are highly difference (boxplots number 6 and 7). For one of them, it seems that people of this cluster rated a lot of times "Nature" and "Theatre".
+Therefore it could be concluded that people interesting in "Nature" is also interested in "Theatre".
+On the other hand, the other cluster seems to be very constant with same number of ratings (a little bit more in "Theatre")
+
+**Cluster 3**
+Again, people who liked "Religious" and "Shopping" do not like "Nature" topic. The mainly difference with the Cluster 1 is that the number of ratings is larger since the boxplot are displaced to top "y" values. (Corresponded to boxplot number 3). 
+
+**Cluster 4**
+Nothing is concluded from this cluster, the number os ratings seems to be constant for all topics. People from this cluster watch same topics except, maybe, "Picnic"
+
+**Cluster 5**
+Again, nothing to say about this cluster except high number of ratings related with the rest of users. The people from this cluster watch all topics in same quantity except a bit more of "Theatre".
+
+**Cluster 6**
+For this case, people who liked "Nature" also liked "Picnic" topic and hence, it is concluded that there are 3 well differentiated people who rate "Nature": those who whatch it with "Theatre" and rate a lot of time and other who rate less times and those who watch it with "Picnic" topic.
+
+**Cluster 7**
+Again, it can be concluded that the people from this cluster rate small number of times realted to the rest of users of the entire dataset.
+

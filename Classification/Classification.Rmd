@@ -1,0 +1,613 @@
+---
+title: "Classification"
+subtitle: "Decision Tree, Random Forest, Perceptron"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+author: Eduardo Moreno Ortigosa, 
+        Illinois Institute of Technology
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1. Decision Tree classification 1994 USCensus datasets.
+
+```{r}
+################################################################################################
+########################################## EXERCISE 1 ##########################################
+###############################################################################################
+```
+
+First, the working directory is set to the appropiated along with the seed. Previously, the features of the data are studied with head and str commands.
+
+```{r}
+rm(list=ls())
+directory <- getwd()
+setwd(directory)
+
+set.seed(1122)
+
+df.train <- read.csv("adult-train.csv")
+df.test <- read.csv("adult-test.csv")
+
+head(df.train)
+str(df.train)
+```
+
+### EDA. Removing the "?".
+
+To remove the "?" character, it is looked the output of str command to check in which features this character exists.
+For the train data, the character is removed as follows:
+
+```{r}
+##### train #####
+sum(df.train == "?")
+colnames(df.train)
+str(df.train) # With str it is possible to view the features with ?
+
+sum(df.train$workclass == "?")
+sum(df.train$occupation == "?")
+sum(df.train$native_country == "?")
+
+rows.to.rm.train <- c(which(df.train$workclass == "?"),
+                    which(df.train$occupation == "?"),
+                    which(df.train$native_country == "?"))
+
+df.train <- df.train[-rows.to.rm.train, ]
+sum(df.train == "?")
+
+dim(df.train)
+```
+
+Identically, for the test data the character "?" is studied and removed in the same way:
+
+```{r}
+##### test #####
+
+sum(df.test == "?")
+str(df.test)
+
+sum(df.test$workclass == "?")
+sum(df.test$occupation == "?")
+sum(df.test$native_country == "?")
+
+rows.to.rm.test <- c(which(df.test$workclass == "?"),
+                      which(df.test$occupation == "?"),
+                      which(df.test$native_country == "?"))
+
+df.test <- df.test[-rows.to.rm.test, ]
+sum(df.test == "?")
+
+dim(df.test)
+```
+
+### Building a Decision Tree.
+
+#### Decision Tree model.
+
+First of all, it is necessary to install the packages:
+```{r}
+#install.packages("rpart")
+#install.packages("rpart.plot")
+```
+
+```{r}
+library("rpart")
+library("rpart.plot")
+help(rpart)
+```
+
+The decision tree model is induced with rpart
+```{r}
+model <- rpart(income ~. ,data=df.train, method = "class") 
+```
+
+#### Visual Analysis.
+Then the model is plotted as shown:
+```{r}
+rpart.plot(model, extra = 104, fallen.leaves = T, type = 4, main = "Rpart on Adult (Full tree)")
+```
+
+#### Most important predictors of the model.
+To see what are the most importat predictors, they should be at the top os the tree. By creating a summary of the model, it results:
+```{r}
+summary(model)
+```
+```{r}
+model$variable.importance[1:3]
+```
+
+Therefore, the most important predictors (as it is said in the summary) are "relationship", "marital_status" and "capital_gain".
+
+#### Conclusions.
+
+```{r}
+rownames(model$splits)[1]
+```
+
+Thus the first split is done on the predictor "relationship".
+
+To know the predicted class of first node, it is observed in the decision tree plot which is "<=50K" class.
+
+Again, the distribution is shown in the deicision tree plot which leads to a distribution of 0.75 (Husband and Wife) and 0.25
+
+### Predict the test dataset.
+
+First, the model is created and the test data is studied.
+
+```{r}
+prediction <- predict(model, df.test, type = "class")
+
+dim(prediction)
+str(prediction)
+length(prediction)
+
+length(df.test$income)
+str(df.test)
+
+#install.packages("caret")
+library("caret")
+#install.packages('e1071')
+#install.packages("lattice")
+```
+
+The Confusion Matrix is created and the questions answered in next sections.
+```{r}
+confusionMatrix(prediction, df.test$income)
+```
+
+#### Balanced Accuracy.
+Balanced Accuracy 0.726 (average of Sensivity and Specificity).
+
+#### Balanced Error Rate
+Balanced Error Rate = 1 - Balanced Accuracy = 1 - 0.726 = 0.274
+
+#### Sensitivity and Specificity.
+Sensivity = 0.9482
+Specificity = 0.5035
+
+#### ROC CURVE. AUC of the curve.
+```{r}
+#install.packages("ROCR")
+#install.packages("gplots")
+library("gplots")
+library("ROCR")
+```
+
+The ROC plot is performed with y label as True positive rate and x label as False positive rate.
+
+```{r}
+# ROC curve
+prediction.rocr <- predict(model, newdata=df.test, type="prob")[,2]
+f.pred <- prediction(prediction.rocr, df.test$income)
+f.perf <- performance(f.pred, "tpr", "fpr")
+plot(f.perf, colorize=T, lwd=3)
+```
+
+
+```{r}
+#Area AUC
+auc <- performance(f.pred, measure = "auc")
+auc@y.values[[1]][1]
+```
+
+The area of AUC is 0.843. Since the area of AUC is high, tht is, it is close to 1 (maximum); the ROC curve shows that the model fits well the data.
+This is due to the fact that the best possible result is a ROC curve with zero false positive rate and 1 true positive rate (top left corner).
+
+### Class imbalance problem. Undersampling.
+
+#### EDA.
+```{r}
+print(sum(df.train$income == "<=50K"))
+print(sum(df.train$income == ">50K"))
+```
+
+The total number of observation of "<=50K" class is 22653 and the total number of ">50K" is 7508.
+Therefore, it is showed that the dataset is unbalanced.
+
+#### Sample method. Creating a new training set.
+
+The lowest number of class of the income feature is ">50K" therefore, the number of samples to use with sample funtion should be ">50K".
+
+```{r}
+less.50 <- which(df.train$income == "<=50K")
+greater.50 <- which(df.train$income == ">50K")
+
+sample.less.50 <- sample(less.50, length(greater.50))
+sample.greater.50 <- sample(greater.50, length(greater.50))
+```
+
+The new dataset of training data will be:
+
+```{r}
+new.df.train <- df.train[c(sample.less.50, sample.greater.50), ]
+```
+
+The total number of each class 
+
+```{r}
+sum(new.df.train$income == "<=50K")
+sum(new.df.train$income == ">50K")
+```
+
+The total number of observation of "<=50K" is 7508 and the class ">50K" is 7508. The majority class is undersampled (both classes have the same number of observations in the train dataset) and the imbalance problem should be solved.
+
+### Training the new undersampled model.
+
+```{r}
+new.model <- rpart(income ~. ,data=new.df.train, method = "class") 
+rpart.plot(new.model, extra = 104, fallen.leaves = T, type = 4,
+           main = "Rpart on Adult (Full Balanced tree)")
+```
+
+It is showed that now the new model is balanced for the root node.
+
+```{r}
+new.prediction <- predict(new.model, df.test, type = "class")
+confusionMatrix(new.prediction, df.test$income)
+```
+
+#### Balanced Accuracy
+
+Balanced Accuracy is 0.7814.
+
+#### Balanced Error Rate
+
+Balanced error rate is 0.2186
+
+#### Sensitivity and Specificity
+
+Sensitivity is 0.6669
+Specificity is 0.8959
+
+#### ROC Curve. AUC of the curve
+
+```{r}
+# ROC curve
+new.prediction.rocr <- predict(new.model, newdata=df.test, type="prob")[,2]
+new.f.pred <- prediction(new.prediction.rocr, df.test$income)
+new.f.perf <- performance(new.f.pred, "tpr", "fpr")
+plot(new.f.perf, colorize=T, lwd=3)
+```
+
+```{r}
+#Area AUC
+new.auc <- performance(new.f.pred, measure = "auc")
+new.auc@y.values[[1]][1]
+```
+
+The area of AUC is 0.787, it is still a high value and thus, the model will still fits well the data (even after undersampling).
+
+### Conclusions. Differences between models.
+
+The main difference between the models is the balanced accuracy; the second one solved the problem of unbalanced by an undersampling method.
+This undersampling may lead into a decrease in the accuracy of the model due to the possibility of lose important observations. 
+
+In this case, the sensitivity of the first model is pretty high (close to 1) but the specificity has 0.5 value (due to unbalanced); after solve it the new sensitivity is lower (the number of positive class "<=50" has been decreased) but the specificity higher. 
+
+In both cases, the positive predicted value is "<=50" (the first one was going to be obvious since there is a higher number of that samples).
+
+Finally AUC is lower in the balanced model. Due to the change in number of positive class which has been unbalanced it is common that the AUC has changed (the true positive rate and the false positive rate change).
+
+## Problem 2. Random Forest classification 1994 USCensus datasets.
+
+```{r}
+################################################################################################
+########################################## EXERCISE 2 ##########################################
+###############################################################################################
+```
+
+### Building a Random Forest model.
+
+```{r}
+#install.packages("randomForest")
+library("randomForest")
+```
+
+The random forest model is induced on "income" feature.
+
+```{r}
+randforest.model <- randomForest(income ~ ., data = df.train)
+```
+
+Fitting the test dataset into the model.
+
+```{r}
+randforest.prediction <- predict(randforest.model, df.test, type = "class")
+```
+
+And the resulting confussion matrix will be
+```{r}
+confusionMatrix(randforest.prediction, df.test$income)
+```
+
+It seems like there is a problem with unbalanced: the sensitivity has a high value and however it differs enough from specificity. 
+
+### Grid Search: ntree, mtry.
+
+
+```{r}
+list.OOB <- list()
+mean.OOB <- c()
+list.CM <- list() #List of ConfusionMatrix
+list.models <- list()
+
+n <- 1
+pos <- 0
+
+for (i in c(100, 750)){
+  for (j in c(2, 5, 7)){
+    
+    pos = pos + 1
+    grid.randForest.model <- randomForest(income ~ ., data = df.train, mtry = j, ntree = i)
+    grid.randForest.prediction <- predict(grid.randForest.model, df.test, type ="class")
+    
+    grid.OOB <- grid.randForest.model$err.rate[,1]
+    grid.CM <- confusionMatrix(grid.randForest.prediction, df.test$income)
+    
+    list.models[[n]] <- grid.randForest.model
+    list.OOB[[pos]] <- grid.OOB
+    mean.OOB[n] <- mean(grid.OOB[[n]])
+    list.CM[[pos]] <- grid.CM
+    
+    sprintf("Itartion number: %d mtry, %d ntree", j, i)
+    n=n + 1
+  }
+}
+
+summary(list.OOB)
+summary(list.CM)
+```
+
+### Determining the best model.
+
+```{r}
+for (k in 1:6){
+  cat("Model has", list.models[[k]]$mtry, "as mtry and %f ntree", 
+      list.models[[k]]$ntree, "\n", fill=T)
+  cat("1-sensitivity ", list.CM[[k]]$byClass["Sensitivity"],"\n", fill=T)
+  cat("2-specificity ", list.CM[[k]]$byClass["Specificity"],"\n", fill=T)
+  cat("3-balanced accuracy ", list.CM[[k]]$byClass["Balanced Accuracy"],"\n", fill=T)
+}
+
+```
+
+Therefore the best model is the fourth, it is the one with the highest values of specificity, sensitivity and balanced accuracy.
+
+### Determining the lowest OBB error.
+
+```{r}
+print(mean.OOB)
+sprintf("The minimum OOB is corresponded %f", min(mean.OOB))
+```
+
+Therefore, the model with the lowest OOB is the fourth. It has been calculated with the mean of the OOB of each model. 
+As it is a method of measuring the prediction error of random forests, boosted decision trees, the lowest one should be the chosen model.
+
+#### Conclusions. Same models for both?
+
+Yes. In this case both models are the same. I think it should be the case because as the OOB is a measure of the prediction error (which will be lower if the model fits better).
+However it can be the case where the OOB error does not match with the best model based on the different size of samples and hence, it will be necessary a further analysis and look if an undersampling (or oversampling) is needed.
+
+## Problem 3. Perceptron.
+
+```{r}
+################################################################################################
+########################################## EXERCISE 3 ##########################################
+###############################################################################################
+```
+
+### Reading the datasets.
+
+First, the library where the Support Vector Machines function is located must be called:
+
+```{r}
+library("e1071")
+library("ggplot2")
+```
+
+The data is loaded.
+```{r}
+df.10 <- read.csv("data-10.csv")
+df.50 <- read.csv("data-50.csv")
+df.500 <- read.csv("data-500.csv")
+```
+
+### EDA.
+And to begin with the exercise, the data should be study by plotting the dataframes to a fast view of how the data is distributed.
+
+```{r}
+summary(df.10)
+
+ggplot(df.10, aes(x = x1, y = x2)) + 
+        geom_point(aes(colour=label), size = 3) +
+        xlab("x1 variable") + 
+        ylab("x2 variable") + 
+        ggtitle("Dataframe of 10 rows")
+
+```
+```{r}
+ggplot(df.50, aes(x = x1, y = x2)) + 
+        geom_point(aes(colour=label), size = 3) +
+        xlab("x1 variable") + 
+        ylab("x2 variable") + 
+        ggtitle("Dataframe of 50 rows")
+```
+
+```{r}
+ggplot(df.500, aes(x = x1, y = x2)) + 
+        geom_point(aes(colour=label), size = 3) +
+        xlab("x1 variable") + 
+        ylab("x2 variable") + 
+        ggtitle("Dataframe of 500 rows")
+```
+
+The perceptron for the three cases is presented as follows. It has been studied a total number of 15 epoch (a number larger enough) in order to know in which epoch the error decrease to zero. In that epoch, the perceptron would have finish and no more iterations are needed.
+
+### 10 observations (easy)
+The green line represents the perpendicular line to the resulting vector w which separates the 2 different clases from the dataset.
+
+```{r}
+df.10 <- read.csv("data-10.csv")
+
+x <- df.10[,3:4]
+y <- df.10[,1]
+
+# Initialize weight vector
+w <- rep(0, dim(x)[2] + 1)  #weigth 
+k <- rep(0, 15)
+
+for (n in 1:15) {
+  
+  # All the rows from labels are iterated
+  for (i in 1:length(y)) {
+    
+    #Activation function based on sign of z
+    z <- sum(w[2:length(w)]*x[i, ]) + w[1]
+    
+    #If z negative, activation function forces -1 value
+    if(z < 0) {
+      ypred <- -1
+    } 
+    #Otherwise, it takes the 1 value
+    else {
+      ypred <- 1
+    }
+    
+    #Difference of weigth with eta set to 0.5
+    w.diff <- 0.5 * (y[i] - ypred) * c(1, as.numeric(x[i, ]))
+    w <- w + w.diff
+    
+    #The errors will be k
+    if ((y[i] - ypred) != 0.0) {
+      k[n] <- k[n] + 1
+    }
+  }
+}
+
+
+plot(1:15, k, type="l", col="red", xlab="epoch #", ylab="errors")
+title("Errors vs epoch")
+
+color.df <- df.10
+color.df[which(df.10$label!=-1), ] = 4
+color.df[which(df.10$label==-1), ] = 10
+plot(df.10$x1,df.10$x2, col=color.df$label, pch = 19)
+abline(-w[1]/w[3],-w[2]/w[3], col = "green")
+```
+
+It is possible to see that in this case, for df.10, the epoch in which the perceptron finish the process is in epoch 5 and thus, no more weights are updated from that point.
+
+### 50 observations (medium)
+```{r}
+df.50 <- read.csv("data-50.csv")
+
+x <- df.50[,3:4]
+y <- df.50[,1]
+
+# Initialize weight vector
+w <- rep(0, dim(x)[2] + 1)  #weigth 
+k <- rep(0, 15)
+
+for (n in 1:15) {
+  
+  # All the rows from labels are iterated
+  for (i in 1:length(y)) {
+    
+    #Activation function based on sign of z
+    z <- sum(w[2:length(w)]*x[i, ]) + w[1]
+    
+    #If z negative, activation function forces -1 value
+    if(z < 0) {
+      ypred <- -1
+    } 
+    #Otherwise, it takes the 1 value
+    else {
+      ypred <- 1
+    }
+    
+    #Difference of weigth with eta set to 0.5
+    w.diff <- 0.5 * (y[i] - ypred) * c(1, as.numeric(x[i, ]))
+    w <- w + w.diff
+    
+    #The errors will be k
+    if ((y[i] - ypred) != 0.0) {
+      k[n] <- k[n] + 1
+    }
+  }
+}
+
+
+plot(1:15, k, type="l", col="red", xlab="epoch #", ylab="errors")
+title("Errors vs epoch")
+
+color.df <- df.50
+color.df[which(df.50$label!=-1), ] = 4
+color.df[which(df.50$label==-1), ] = 10
+plot(df.50$x1,df.50$x2, col=color.df$label, pch = 19)
+abline(-w[1]/w[3],-w[2]/w[3], col = "green")
+```
+
+For this case, the epoch is 10 and no more updates of weight are done from this epoch. Note that there is a point of one label (red point) which yields in the line that separates both sets of points.
+
+### 500 observations (hard)
+```{r}
+df.500 <- read.csv("data-500.csv")
+
+x <- df.500[,3:4]
+y <- df.500[,1]
+
+# initialize weight vector
+w <- rep(0, dim(x)[2] + 1)  #weigth 
+k <- rep(0, 15)
+
+
+
+for (n in 1:15) {
+  
+  # All the rows from labels are iterated
+  for (i in 1:length(y)) {
+    
+    #Activation function based on sign of z
+    z <- sum(w[2:length(w)]*x[i, ]) + w[1]
+    
+    #If z negative, activation function forces -1 value
+    if(z < 0) {
+      ypred <- -1
+    } 
+    #Otherwise, it takes the 1 value
+    else {
+      ypred <- 1
+    }
+    
+    #Difference of weigth with eta set to 0.5
+    w.diff <- 0.5 * (y[i] - ypred) * c(1, as.numeric(x[i, ]))
+    w <- w + w.diff
+    
+    #The errors will be k
+    if ((y[i] - ypred) != 0.0) {
+      k[n] <- k[n] + 1
+    }
+    
+  }
+}
+
+
+plot(1:15, k, type="l", col="red", xlab="epoch #", ylab="errors")
+title("Errors vs epoch")
+
+color.df <- df.500
+color.df[which(df.500$label!=-1), ] = 4
+color.df[which(df.500$label==-1), ] = 10
+plot(df.500$x1,df.500$x2, col=color.df$label, pch = 19)
+abline(-w[1]/w[3],-w[2]/w[3], col = "green")
+```
+
+Finally, for the df.500, the epoch is 4. In this case the error decrease faster. This should be due to the labels that are in the dataset since less iterations are need; the perceptron would find faster the line which delimites both sizes.
+With higher number of points it will be more common having more points which yield in the green line.
+
+
+
+

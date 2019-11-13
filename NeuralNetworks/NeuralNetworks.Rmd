@@ -1,0 +1,792 @@
+---
+title: "Neural Networks"
+subtitle: "Shallow Neural Network, 2 Hidden Layers Neural Network, Bacthing sizes, Types Functions"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+author: Eduardo Moreno Ortigosa, 
+        Illinois Institute of Technology
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## EXERCISE 1. Neural Network on a singled chest mounted accelerometer dataset.
+
+### Preparing the data
+
+```{r}
+rm(list=ls())
+
+library('keras')
+library('dplyr')
+library('caret')
+library("e1071")
+library("ggplot2")
+```
+
+#### Set working directory as needed
+```{r}
+directory <- getwd()
+setwd(directory)
+
+df <- read.csv("activity-small.csv")
+```
+
+#### Seed the PRNG
+```{r}
+set.seed(1122)
+```
+
+#### Scaling the dataset
+
+```{r}
+label <- df$label
+df$label <- NULL
+df <- as.data.frame(scale(df))
+df$label <- label
+rm(label)
+```
+
+First of all, the dataset is splitted into the train data and test data. 
+
+```{r}
+set.seed("123")
+index <- sample(1:nrow(df), 0.8*dim(df)[1]) #sample of 250 number between 1 and the total rows
+df.train <- df[index, ] #training subset
+df.test <- df[-index, ] #test subset
+
+dim(df)
+dim(df.train)
+dim(df.test)
+```
+
+```{r}
+X_train <- select(df.train, -label)
+y_train <- df.train$label
+```
+
+```{r}
+y_train.ohe <- to_categorical(y_train)
+
+X_test <- select(df.test, -label)
+y_test <- df.test$label
+y_test.ohe <- to_categorical(df.test$label)
+```
+
+```{r}
+dim(X_train)
+```
+
+### Creating a shallow Neural Network.
+
+The shallow neural network can be understood consist of 1 or 2 hidden layers. In order to know how many neurons should be used in the hidden layer, some exploratory data analysis is needed.
+
+```{r}
+summary(df)
+```
+
+```{r}
+ggplot(df, aes(x = xaccel, y = yaccel)) + 
+        geom_point(aes(colour=label), size = 3) +
+        xlab("x acceleration") + 
+        ylab("y acceleration") + 
+        ggtitle("Dataframe of chest mounted accelerometer")
+```
+
+```{r}
+library("plot3D")
+
+scatter3D(df$xaccel, df$yaccel, df$zaccel, colvar = df$label, phi=45)
+scatter3D(df$xaccel, df$yaccel, df$zaccel, colvar = df$label, phi=0)
+```
+
+#### Relu activation function
+
+```{r}
+model <- keras_model_sequential()
+
+
+model %>% 
+  
+  layer_dense(units = 8, activation = 'relu', input_shape = c(3)) %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+
+summary(model)
+```
+
+```{r}
+model %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy',
+  metrics = c("accuracy")
+)
+```
+
+```{r}
+model %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+)
+```
+
+It is concluded from the plot created that the accuracy and validation accuracy converge almost to the same value (it is expected to have a better performance for a bacth size of 1).
+
+```{r}
+model %>% evaluate(as.matrix(X_test), y_test.ohe)
+```
+
+```{r}
+pred.class  <- model %>% predict_classes(as.matrix(X_test))
+pred.prob   <- model %>% predict(as.matrix(X_test)) %>% round(3)
+```
+
+```{r}
+confusionMatrix(as.factor(y_test), as.factor(pred.class))
+```
+
+#### Sigmoid activation function
+
+```{r}
+modelsig <- keras_model_sequential()
+
+
+modelsig %>% 
+  
+  layer_dense(units = 8, activation = 'sigmoid', input_shape = c(3)) %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+modelsig %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy',
+  metrics = c("accuracy")
+)
+
+modelsig %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+modelsig %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.sig  <- modelsig %>% predict_classes(as.matrix(X_test))
+pred.prob.sig   <- modelsig %>% predict(as.matrix(X_test)) %>% round(3)
+
+confusionMatrix(as.factor(y_test), as.factor(pred.class.sig))
+```
+
+#### Tanh activation function
+
+```{r}
+modeltanh <- keras_model_sequential()
+
+
+modeltanh %>% 
+  
+  layer_dense(units = 8, activation = 'tanh', input_shape = c(3)) %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+modeltanh %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy',
+  metrics = c("accuracy")
+)
+
+modeltanh %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+modeltanh %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.tanh  <- modeltanh %>% predict_classes(as.matrix(X_test))
+pred.prob.tanh   <- modeltanh %>% predict(as.matrix(X_test)) %>% round(3)
+
+confusionMatrix(as.factor(y_test), as.factor(pred.class.tanh))
+```
+
+By running all the three possible activation functions, it can be concluded that, for this case, the highest accuracy is for tanh function.
+Along with that, the highest balanced accuracy value is for tanh activation function which may yields in a better sensitivity (closer to 1).
+The specificity looks very similar for the three models.
+
+### Mini-batch gradient descent. Different batch sizes.
+
+In order to solve mini batch gradient descent with several batches and to analyze the resulting computing time, a for loop would be used for each batch.
+Note that, in order to store those values, the accuracy of the model takes a single value (and then it can be store in an array) meanwhile the sesitivity, specificity and balanced accuracy are values per class and hence, they must be store in a list.
+
+Note that for this section, the activation function used is relu (to continue with the first model made in section A), however, it should be used the tanh activation function due to it has the highest balanced accuracy and best sensitivity results. 
+The model with this activation function will be used in section D.
+
+```{r}
+comp.time <- c()  #Time spent in each fitting procress
+accur.list <- c() #The variable in wich the accuracy will be stored
+sens.list <- list() #The variable in which the sensitivity will be stored
+spec.list <- list() #The variable in which the specificity will be stored
+balan.list <- list() #The variable in which the balanced accuracy will be stored
+
+b <- 1 #The number of the batch in which the iteration is
+
+
+for (i in c(1,32,64,128,256)){
+  
+  begin <- Sys.time()
+  
+  model %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=i, #Diferent size batches
+  verbose = 0   #To avoid showing each progress bar
+)
+
+  end <- Sys.time()
+
+  cat("\n")
+
+  comp.time[b] <- end-begin
+  print(end-begin)
+
+  cat("\n")
+
+  model %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+  cat("\n")
+
+  pred.class  <- model %>% predict_classes(as.matrix(X_test))
+  pred.prob   <- model %>% predict(as.matrix(X_test)) %>% round(3)
+
+  cat("\n")
+  confu <- confusionMatrix(as.factor(y_test), as.factor(pred.class))
+  
+  accur.list[b] <- confu$overall[1]
+  sens.list[[b]] <- confu$byClass[,1]
+  spec.list[[b]] <- confu$byClass[,2]
+  balan.list[[b]] <- confu$byClass[,11]
+  
+  b <- b + 1 
+}
+```
+
+In the plots it is shown that the accuracy and val_acc converges better for lower batch sizes. However the computational cost of it is highly increased.
+For this reason and assuming that computational cost, the next section would be analyzed with batch size of 1, in order to choose the best combination of functions.
+
+### Accurcy of each model. Sensitivity, specificity and balanced accuracy.
+
+The overall information for each batch size is shown below. At the end is shown a table that groups all the models to compare results and draw conclusions.
+
+```{r}
+b <- 1
+for (j in c(1,32,64,128,256)){
+  
+  cat("BATCH SIZE", j)
+  cat("\n")
+  cat("Accuracy of the model", accur.list[b])
+  cat("\n")
+  cat("Sensitivy per class", sens.list[[b]])
+  cat("\n")
+  cat("Specificity per class", spec.list[[b]])
+  cat("\n")
+  cat("Balanced Accuracy per class", balan.list[[b]])
+  cat("\n","\n")
+  
+  b <- b + 1
+}
+```
+
+#### Accuracy
+
+First of all, studying the accuracy of each model:
+
+```{r}
+print(data.frame("B-size 1"=accur.list[1],
+           "B-size 32"=accur.list[2],
+           "B-size 64"=accur.list[3],
+           "B-size 128"=accur.list[4],
+           "B-size 256"=accur.list[5]))
+```
+
+At first approach, the accuracy of all models looks very similar. This may be because the accuracy of prediction can not be increased with the number of batches (in this case, with a shallow neural network) in a big quantity.
+With a fixed number of epochs (set to 100), by increasing the batch size, it gives more accurate gradients because the loss may be optimizing in a larger set of data.
+
+#### Sensitivity
+
+```{r}
+print(data.frame("B-size 1"=sens.list[[1]],
+           "B-size 32"=sens.list[[2]],
+           "B-size 64"=sens.list[[3]],
+           "B-size 128"=sens.list[[4]],
+           "B-size 256"=sens.list[[5]]))
+```
+
+With respecto to the Sensitivity.
+-The Sensitivity for the class 0 isbetter for batch sizes of 32, 64 and 256.
+-For Class 1, there is the same sensitivity for batch sizes of 32, 64 and 128 and it is increased for 256.
+-Class 2 share values for batch size of 32 to 256, the largest if for batch size 1.
+-Class 3, same than before.
+
+In this case, the sensitivity of Class 0 is close to 1. The second highest sensitivity value is for Class 2 and then Classes 3 and 1 (being 1 the lowest True Positive Rate).
+
+In general, it is concluded that with a larger batch size, the sensitivity of the model is increased. The number of True Positive (TP) over all actual positive observations (TP+FN) is higher.
+
+#### Specificity
+
+```{r}
+print(data.frame("B-size 1"=spec.list[[1]],
+           "B-size 32"=spec.list[[2]],
+           "B-size 64"=spec.list[[3]],
+           "B-size 128"=spec.list[[4]],
+           "B-size 256"=spec.list[[5]]))
+```
+
+The Specificities of all Classes are close to 1, this means that the True Negative Rate (True negative over all actual negative observations in the test set) is close to 1 and thus, the number of False Positives is low.
+This means that the model would not fail (only very little) in predicting a class which is negative as a positive class.
+
+#### Balanced Accuracy
+
+```{r}
+print(data.frame("B-size 1"=balan.list[[1]],
+           "B-size 32"=balan.list[[2]],
+           "B-size 64"=balan.list[[3]],
+           "B-size 128"=balan.list[[4]],
+           "B-size 256"=balan.list[[5]]))
+```
+
+The dataset looks to be balanced for all the classes, maybe it can be increased for Classes 1 and 3 but it is possible to work with them.
+
+#### Final conclusion
+
+The sensitivity of the classes 1 and 3 may be affected because of unbalanced and thus, it is lower than the other two.
+The specificity is close to 1 for all classes and thus, it will not predict a big quantity of prositives values which actually are negatives.
+The dataset is balanced, however the balanced accuracy could be better for classes 1 and 3. Maybe it can be sampled again for better results in sensitivity.
+
+### 2 Hidden Layers Neural Network Analysis.
+
+#### First approach. Relu, same neurons.
+
+In order to compare results with the section A and the section B, C (with mini batches), the activation function that will be used is relu. 
+Once the conclusion is drawn it will be possible to compare it with the rest of activation function.
+
+First of all it is created the neural network with more than 1 hidden layer, having both of them the relu activation function and the same number of neurons.
+
+```{r}
+total.model <- keras_model_sequential()
+
+
+total.model %>% 
+  
+  layer_dense(units = 8, activation = 'relu', input_shape = c(3)) %>%
+  
+  layer_dense(units = 8, activation = 'relu') %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+total.model %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy',
+  metrics = c("accuracy")
+)
+
+begin <- Sys.time()
+
+total.model %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+end <- Sys.time()
+
+cat("\n")
+print(end-begin)
+cat("\n")
+
+total.model %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.total  <- total.model %>% predict_classes(as.matrix(X_test))
+pred.prob.total   <- total.model %>% predict(as.matrix(X_test)) %>% round(3)
+
+cat("\n")
+confusionMatrix(as.factor(y_test), as.factor(pred.class.total))
+```
+
+It is concluded that the accuracy of the model is slighly increased, as well as the sensitivity and the balanced accuracy. The changes are not vry pronounced.
+
+#### Second approach. Relu, more neurons
+
+```{r}
+total.model.2 <- keras_model_sequential()
+
+
+total.model.2 %>% 
+  
+  layer_dense(units = 8, activation = 'relu', input_shape = c(3)) %>%
+  
+  layer_dense(units = 12, activation = 'relu') %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+total.model.2 %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy'
+)
+
+begin <- Sys.time()
+
+total.model.2 %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+end <- Sys.time()
+
+cat("\n")
+print(end-begin)
+cat("\n")
+
+total.model.2 %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.total.2  <- total.model.2 %>% predict_classes(as.matrix(X_test))
+pred.prob.total.2   <- total.model.2 %>% predict(as.matrix(X_test)) %>% round(3)
+
+cat("\n")
+confusionMatrix(as.factor(y_test), as.factor(pred.class.total.2))
+```
+
+The model accuracy is slightly lower. Same for Balanced accuracy along with sensitivity and specificity. Thus it is concluded that high number of neurons yields in better perfomance of the model. The computational cost is higher (2.58 mins for 12 neurons and 2.43 for 8).
+For larger or more complex datasets, it should be found an optimal relation between time spent in fitting the model and the results obteined.
+
+#### Third approach. Relu and tanh. Relu and sigmoid.
+
+As it has been commented, the highest balanced accuracy and sensitivity was with tanh activation function. Now combining them, It would be tried to perform the model with this activation function for the hidden layer added and after that, try the entire neural network with tanh activation function (in both hidden layer).
+
+```{r}
+total.model.3 <- keras_model_sequential()
+
+
+total.model.3 %>% 
+  
+  layer_dense(units = 8, activation = 'relu', input_shape = c(3)) %>%
+  
+  layer_dense(units = 12, activation = 'tanh') %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+total.model.3 %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy'
+)
+
+begin <- Sys.time()
+
+total.model.3 %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+end <- Sys.time()
+
+cat("\n")
+print(end-begin)
+cat("\n")
+
+total.model.3 %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.total.3  <- total.model.3 %>% predict_classes(as.matrix(X_test))
+pred.prob.total.3   <- total.model.3 %>% predict(as.matrix(X_test)) %>% round(3)
+
+cat("\n")
+confusionMatrix(as.factor(y_test), as.factor(pred.class.total.3))
+```
+
+Despite the model with 1 hidden layer offers better results with tanh activation function, using it in the second hidden layer results in a worse perfomance.
+
+Now in order to check the same model with sigmoid function for second layer:
+
+```{r}
+total.model.4 <- keras_model_sequential()
+
+
+total.model.4 %>% 
+  
+  layer_dense(units = 8, activation = 'relu', input_shape = c(3)) %>%
+  
+  layer_dense(units = 12, activation = 'sigmoid') %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+total.model.4 %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy'
+)
+
+begin <- Sys.time()
+
+total.model.4 %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+end <- Sys.time()
+
+cat("\n")
+print(end-begin)
+cat("\n")
+
+total.model.4 %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.total.4  <- total.model.4 %>% predict_classes(as.matrix(X_test))
+pred.prob.total.4   <- total.model.4 %>% predict(as.matrix(X_test)) %>% round(3)
+
+cat("\n")
+confusionMatrix(as.factor(y_test), as.factor(pred.class.total.4))
+```
+
+It can be concluded that this combination offers worse results than 2 relu functions. This function could be used too since it has large accuracy along with sensitivity and balanced accuracy.
+
+#### Fourth approach. tanh activation function for both layers.
+
+```{r}
+total.model.5 <- keras_model_sequential()
+
+
+total.model.5 %>% 
+  
+  layer_dense(units = 8, activation = 'tanh', input_shape = c(3)) %>%
+  
+  layer_dense(units = 12, activation = 'tanh') %>%
+
+  layer_dense(units = 4, activation = 'softmax')
+
+total.model.5 %>% compile(
+  optimizer = 'adam',
+  loss = 'categorical_crossentropy'
+)
+
+begin <- Sys.time()
+
+total.model.5 %>% fit(
+  data.matrix(X_train), 
+  y_train.ohe,
+  epochs=100,
+  batch_size=1,
+  validation_split=0.20,
+  verbose = 0
+)
+
+end <- Sys.time()
+
+cat("\n")
+print(end-begin)
+cat("\n")
+
+total.model.5 %>% evaluate(as.matrix(X_test), y_test.ohe)
+
+pred.class.total.5  <- total.model.5 %>% predict_classes(as.matrix(X_test))
+pred.prob.total.5   <- total.model.5 %>% predict(as.matrix(X_test)) %>% round(3)
+
+cat("\n")
+confusionMatrix(as.factor(y_test), as.factor(pred.class.total.5))
+```
+
+As it cannot be inferred any specific conclusion on how many neurons the model should have, it will be runned several types of models for relu activation function varying the number of neurons.
+
+### Best model, 2 hidden layers.
+
+Finally, in order to know which model should be the best and draw conclusions, two for loop are runned with batch size of 64 (to reduce time spent in computation), with number of neurons of 8, 10 and 12 for each hidden layer and relu activation function.
+
+```{r}
+comp.time <- c()  #Time spent in each fitting procress
+conf.matrix <- list() #The variable in wich each confusion matrix will be stored
+
+b <- 1 #The number of the batch in which the iteration is
+
+for (i in c(8, 10, 12)){
+  
+  for (j in c(8, 10, 12)){
+  
+    best.model <- keras_model_sequential()
+        
+    best.model %>% 
+      
+      layer_dense(units = i, activation = 'relu', input_shape = c(3)) %>%
+      
+      layer_dense(units = j, activation = 'relu') %>%
+    
+      layer_dense(units = 4, activation = 'softmax')
+    
+    best.model %>% compile(
+      optimizer = 'adam',
+      loss = 'categorical_crossentropy'
+      )
+    
+    begin <- Sys.time()
+    
+    best.model %>% fit(
+      data.matrix(X_train), 
+      y_train.ohe,
+      epochs=100,
+      batch_size=64,
+      validation_split=0.20,
+      verbose = 0
+    )
+    
+    end <- Sys.time()
+        
+    comp.time[b] <- end-begin
+        
+    best.model %>% evaluate(as.matrix(X_test), y_test.ohe)
+    
+    pred.class.best  <- best.model %>% predict_classes(as.matrix(X_test))
+    pred.prob.best   <- best.model %>% predict(as.matrix(X_test)) %>% round(3)
+    
+    cat("\n")
+    conf.matrix[[b]] <- confusionMatrix(as.factor(y_test), as.factor(pred.class.best))
+        
+    b <- b + 1
+  }
+}
+```
+
+#### Discussion of best model.
+
+Now showing the results obteined from the previous for loops. First it is showed the computatioanl time spent in each fitting process.
+
+```{r}
+data.frame("Number of neurons" = c("8/8", "8/10", "8/12", 
+                               "10/8", "10/10", "10/12", 
+                               "12/8", "12/10", "12/12"),
+                               comp.time)
+
+sprintf("The minimum computational time correspond to 8 neurons in first hidden layer and 12 in second, with a total running time of %f seconds", min(comp.time))
+```
+
+Now for the results related with accuracy, sensitivity, specificity and balanced accuracy:
+
+```{r}
+sprintf("ACCURACY OF EACH COMBINTION OF NEURONS")
+cat("\n")
+cat("8/8:",conf.matrix[[1]]$overall[1], "\t",
+    "8/10:", conf.matrix[[2]]$overall[1], "\t",
+    "8/12:",conf.matrix[[3]]$overall[1], "\t")
+cat("\n")
+cat("10/8:",conf.matrix[[4]]$overall[1], "\t",
+    "10/10:", conf.matrix[[5]]$overall[1], "\t",
+    "10/12:",conf.matrix[[6]]$overall[1], "\t")
+cat("\n")
+cat("12/8:",conf.matrix[[7]]$overall[1], "\t",
+    "12/10:", conf.matrix[[8]]$overall[1], "\t",
+    "12/12:",conf.matrix[[9]]$overall[1], "\t")
+```
+The maximum accuracy is obtained with 12 neurons in first hidden layer and it does not mind which one in the second one (note that this conclusion is drawn with relu activation function).
+
+```{r}
+sprintf("SENSITIVITY OF EACH COMBINTION OF NEURONS")
+cat("\n")
+sens.table <- cbind("8/8"=conf.matrix[[1]]$byClass[,1],
+                    "8/10"=conf.matrix[[2]]$byClass[,1],
+                    "8/12"=conf.matrix[[3]]$byClass[,1],
+                    
+                    "10/8"=conf.matrix[[4]]$byClass[,1],
+                    "10/10"=conf.matrix[[5]]$byClass[,1],
+                    "10/12"=conf.matrix[[6]]$byClass[,1],
+                    
+                    "12/8"=conf.matrix[[7]]$byClass[,1],
+                    "12/10"=conf.matrix[[8]]$byClass[,1],
+                    "12/12"=conf.matrix[[9]]$byClass[,1])
+sens.table
+cat("\n")
+sprintf("The maximum sensitivity for Class 0 is: %f, which correponds to the combination of neurons of %s", max(sens.table[1,]), names(which(sens.table[1,]==max(sens.table[1,]))))
+cat("\n")
+sprintf("The maximum sensitivity for Class 1 is: %f, which correponds to the combination of neurons of %s", max(sens.table[2,]), names(which(sens.table[2,]==max(sens.table[2,]))))
+cat("\n")
+sprintf("The maximum sensitivity for Class 2 is: %f, which correponds to the combination of neurons of %s", max(sens.table[3,]), names(which(sens.table[3,]==max(sens.table[3,]))))
+cat("\n")
+sprintf("The maximum sensitivity for Class 3 is: %f, which correponds to the combination of neurons of %s", max(sens.table[4,]), names(which(sens.table[4,]==max(sens.table[4,]))))
+```
+
+Note that the highest accuracy belongs to the combination 10/12..
+Note too that it is so important to know which class is being analyzed, that is, if we are more interested in the sensitivity of one specific class. In this exercise it is being analyzed the overall perfomance of the model, no specific classes.
+
+```{r}
+sprintf("SPECIFICITY OF EACH COMBINTION OF NEURONS")
+cat("\n")
+spec.table <- cbind("8/8"=conf.matrix[[1]]$byClass[,2],
+                    "8/10"=conf.matrix[[2]]$byClass[,2],
+                    "8/12"=conf.matrix[[3]]$byClass[,2],
+                    
+                    "10/8"=conf.matrix[[4]]$byClass[,2],
+                    "10/10"=conf.matrix[[5]]$byClass[,2],
+                    "10/12"=conf.matrix[[6]]$byClass[,2],
+                    
+                    "12/8"=conf.matrix[[7]]$byClass[,2],
+                    "12/10"=conf.matrix[[8]]$byClass[,2],
+                    "12/12"=conf.matrix[[9]]$byClass[,2])
+spec.table
+```
+This type of attribute does not give further information since all the specificities of the different combinations are high enough to consider all of them with a good perfomance.
+
+```{r}
+sprintf("BALANCED ACCURACY OF EACH COMBINTION OF NEURONS")
+cat("\n")
+balan.table <- cbind("8/8"=conf.matrix[[1]]$byClass[,11],
+                    "8/10"=conf.matrix[[2]]$byClass[,11],
+                    "8/12"=conf.matrix[[3]]$byClass[,11],
+                    
+                    "10/8"=conf.matrix[[4]]$byClass[,11],
+                    "10/10"=conf.matrix[[5]]$byClass[,11],
+                    "10/12"=conf.matrix[[6]]$byClass[,11],
+                    
+                    "12/8"=conf.matrix[[7]]$byClass[,11],
+                    "12/10"=conf.matrix[[8]]$byClass[,11],
+                    "12/12"=conf.matrix[[9]]$byClass[,11])
+balan.table
+cat("\n")
+sprintf("The maximum balanced accuracy for Class 0 is: %f, which correponds to the combination of neurons of %s", max(balan.table[1,]), names(which(balan.table[1,]==max(balan.table[1,]))))
+cat("\n")
+sprintf("The maximum balanced accuracy for Class 1 is: %f, which correponds to the combination of neurons of %s", max(balan.table[2,]), names(which(balan.table[2,]==max(balan.table[2,]))))
+cat("\n")
+sprintf("The maximum balanced accuracy for Class 2 is: %f, which correponds to the combination of neurons of %s", max(balan.table[3,]), names(which(balan.table[3,]==max(balan.table[3,]))))
+cat("\n")
+sprintf("The maximum balanced accuracy for Class 3 is: %f, which correponds to the combination of neurons of %s", max(balan.table[4,]), names(which(balan.table[4,]==max(balan.table[4,]))))
+```
+
+The type activation functions and number of neurons have been tested in this 2 layers, for further layers this method maybe results unsuitable and these two parameters (activation function of each hidden layer and number of neurons) should be chosen on the basis of the results obtained.
+
+That means that, I have established an hypothesis where the best results for the 2 first hidden layers (with number of neurons and activation function) will be kept for the rest of hidden layers. However this can be not true and the prefomance of the neural network with more hidden ayers can be better by using other activation function than relu and different number of neurons.
+
+#### Conclusions
+
+The best model studied before is concluded that should be 2 "relu" functions since it gives the best accuracy of the model along with balanced accuracy and sensitivity.
+The number of neurons should be 10/12 beacuse of the values obtained for balanced accuracy and sensitivity. Note that this number of neurons may have not the best accuray but it almost to the largest one.

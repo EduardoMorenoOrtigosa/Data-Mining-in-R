@@ -1,0 +1,686 @@
+---
+title: "LINEAR REGRESSION"
+subtitle: "EDA, Simple Linear Regression, Multiple Linear Regression"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+author: Eduardo Moreno Ortigosa
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1. EDA on college dataset.
+
+```{r}
+########################################################################################
+################################### PROBLEM 1 #########################################
+########################################################################################
+```
+
+### Setting directory and reading the data.
+
+```{r}
+rm(list=ls())
+directory <- getwd()
+setwd(directory)
+
+college.df <- read.csv("college.csv")
+head(college.df)
+```
+
+### Number Private and Public colleges
+
+```{r}
+table(college.df$Private)
+print(table(college.df$Private)[1]) #Public Colleges
+print(table(college.df$Private)[2]) #Private Colleges
+```
+
+The number of Public Colleges is 212 and the number of Private Colleges is 565.
+
+### Analysis of each college.
+
+It is possible to do this section by 2 ways:
+
+1) By looking for the booleans where the condition of Private is TRUE or FALSE.
+
+```{r}
+library('dplyr')
+
+condition <- data.frame(college.df$Private=='Yes')
+
+head(college.df[condition==TRUE,])
+head(college.df[condition==FALSE,])
+
+private.df <- college.df[condition==TRUE,]
+public.df <- college.df[condition==FALSE,]
+```
+2) By using the filter function from dplyr.
+
+```{r}
+private.df2 <- filter(college.df, Private == "Yes")
+public.df2 <- filter(college.df, Private == "No")
+```
+
+The histogram of PhD in Private colleges is as follows:
+
+```{r}
+hist(private.df$PhD, xlab = 'PhD', ylab = 'Frequency of PhD', main = 'PhD in private colleges'
+     , col = 'lightblue', probability = TRUE)
+
+lines(density(private.df$PhD),col = 'darkblue', lwd = 2)
+```
+
+And the histogram for Public colleges results:
+
+```{r}
+hist(public.df$PhD, xlab = 'PhD', ylab = 'Frequency of PhD', main = 'PhD in public colleges'
+     , col = 'lightyellow', probability = TRUE)
+
+lines(density(public.df$PhD),col = 'orange', lwd = 2)
+```
+
+The difference between them is not very high although, making the sum of the values (inside the bins) it would lead to a higher number of PhD's for private (This will be checked in further sections).
+
+### Studying of gradings per college.
+
+First of all, the dataset is ordered by the graduation rate feature (in increasing order, the last row being the college with the highest graduation rate)
+
+```{r}
+sorted.college.df <- arrange(college.df, Grad.Rate)
+head(sorted.college.df, n = 5)
+```
+
+Then the 5 colleges with lowest graduation rate will be first 5 rows;
+
+```{r}
+head(select(sorted.college.df, Name, Grad.Rate), n = 5) #MIN GRADUATION RATE
+```
+
+And the top 5 colleges:
+
+```{r}
+tail(select(sorted.college.df, Name, Grad.Rate), n = 5) #MAX GRADUATION RATE
+```
+
+### Conclusions.
+
+#### Variables of each dataset.
+
+```{r}
+summary(college.df)
+```
+
+#### Scatterplot matrxi
+
+```{r}
+pairs(college.df[,1:10])
+```
+
+#### Which alumini donate more to their colleges: public or private.
+
+```{r}
+boxplot(perc.alumni~Private, college.df, col=c("red","yellow"), main = "Private vs Donations",
+        xlab = "Private College (Yes or No)", ylab = "Money donated")
+```
+
+Private has the highest IQR thus, more donations are made in private. It is not possible to look at the median because it has not considerations on the outliers.
+
+To check the result:
+
+```{r}
+sum(private.df$perc.alumni)
+sum(public.df$perc.alumni)
+```
+
+The total number of donations is higher in private. Calculating the mean leads on:
+
+```{r}
+mean(private.df$perc.alumni)
+mean(public.df$perc.alumni)
+```
+
+Therefore, the number of donations per university is higher in private too.
+
+#### Which colleges employs more PhDs: public or private.
+
+```{r}
+boxplot(PhD~Private, college.df, col=c("lightblue","lightgreen"), 
+        main = "Private vs Ph.D.'s",
+        xlab = "Private College (Yes or No)", ylab = "Total Ph.D.")
+```
+
+It is concluded that the college with more PhD's is the private college due to the higher IQR. Looking at the boxplot, the Q3 is almost equal for both boxplots, however the Q1 of private is lower; it yields in a higer interquartile range for the private college.
+
+Checking this result:
+
+```{r}
+sum(private.df$PhD)
+sum(public.df$PhD)
+```
+
+The number of PhD's is higher in private. Calculating the mean:
+
+```{r}
+mean(private.df$PhD)
+mean(public.df$PhD)
+```
+
+Therefore the total number of PhD's is higher in private but the number of PhD's per university is higher in public (due to the number of privates is much higher).
+
+#### Elite universities.
+
+```{r}
+Elite <- rep("No", nrow(college.df))
+Elite[college.df$Top10perc > 50] <- "Yes"
+Elite <- as.factor(Elite)
+college.df <- data.frame(college.df, Elite)
+
+summary(college.df)
+```
+
+There are 78 Elite colleges.
+
+#### Quantitative variables. 
+
+First the quantitative variables are checked:
+
+```{r}
+str(college.df) #To check the quantitative variables
+```
+
+Different number of bins for one variable:
+
+```{r}
+par(mfrow=c(2,2))
+hist(college.df$Expend, main = "Histogram of Expend for 100 bins",
+     xlab = "Expend", ylab = "frecuency of Expend",
+     breaks = 100)
+
+hist(college.df$Expend, main = "Histogram of Expend for 1000 bins",
+     xlab = "Expend", ylab = "frecuency of Expend",
+     breaks = 1000)
+
+hist(college.df$Expend, main = "Histogram of Expend for 2000 bins",
+     xlab = "Expend", ylab = "frecuency of Expend",
+     breaks = 2000)
+
+hist(college.df$Expend, main = "Histogram of Expend for 5000 bins",
+     xlab = "Expend", ylab = "frecuency of Expend",
+     breaks = 5000)
+
+par(mfrow=c(1,1))
+```
+
+Different number of bins for different variables:
+
+```{r}
+par(mfrow=c(2,2))
+hist(college.df$Apps, main = "Histogram of Apps for 50 bins",
+     xlab = "Apps", ylab = "frecuency of Apps",
+     breaks = 50)
+
+hist(college.df$Enroll, main = "Histogram of Enroll for 100 bins",
+     xlab = "Enroll", ylab = "frecuency of Enroll",
+     breaks = 100)
+
+hist(college.df$Books, main = "Histogram of Books for 250 bins",
+     xlab = "Books", ylab = "frecuency of Books",
+     breaks = 250)
+
+hist(college.df$Accept, main = "Histogram of Accept for 600 bins",
+     xlab = "Acceptance", ylab = "frecuency of Acceptance",
+     breaks = 600)
+
+par(mfrow=c(1,1))
+```
+
+#### Further EDA.
+
+To explore the data, it will be considered the Applications received by the colleges depending on they are private or public.
+
+Plotting the number of Apps with the college:
+
+```{r}
+boxplot(Apps~Private, college.df, col=c("lightblue","lightgreen"), 
+        main = "Private vs Apps",
+        xlab = "Private College (Yes or No)", ylab = "Total Apps")
+```
+
+It is concluded that the IQR for public colleges is larger than the one for private. It seems that there are more people who cannot affort a private college.
+
+To check that:
+
+```{r}
+sum(private.df$Apps)
+sum(public.df$Apps)
+```
+The total number of Applications received is similar but to perform a good analysis, it should be obteined the mean.
+
+```{r}
+mean(private.df$Apps)
+mean(public.df$Apps)
+```
+Therefore, the total number of applications per college is much higher in public, 5729 application in public and 1977 in private.
+
+Mention should be made of the presence of an outlier in the plot with high value of total applications, it looks that this college received the biggest number of applications so, it can be inferred that it is a good public school or maybe the only one in a certain area.
+
+```{r}
+max.public <- max(public.df$Apps)
+filter(public.df,public.df$Apps == max.public)
+```
+
+This college is called Rutgers at New Brunswick and the number of accept applications is higher too thus, it is possible to conclude that this is one of the biggest colleges of the dataset (maybe the biggest).
+In order to check this hypothesis, several features are plotted (of public colleges) and compared with the values of this specific college.
+
+```{r}
+boxplot(Personal~Private, college.df, col=c("lightblue","lightgreen"), 
+        main = "Private vs Personal",
+        xlab = "Private College (Yes or No)", ylab = "Total Personal")
+```
+
+The personal for the public colleges is greater (with the exception of several private colleges).
+The mean of the personal for public colleges is:
+
+```{r}
+mean(public.df$Personal)
+```
+
+So it is possible to conclude that this college has more personal than the mean and hence, along with the number of applications accepted, it is a big university.
+In order to check if it's an Elite college:
+
+```{r}
+select(filter(college.df,college.df$Apps == max.public), Elite)
+```
+
+Then it is not an elite college.
+
+Further analysis can be performed by exploring other variables. As an example, for the total of accepted application, how many of them belong to part-time undergraduates and how many to full.time.
+
+```{r}
+select(filter(college.df,college.df$Apps == max.public), F.Undergrad, P.Undergrad)
+```
+
+Most of students who were accepted by the university are full-time students which reinforces the theory that this is a big university as more capacity would be needed in the classrooms.
+
+## Problem 2. Multiple Regression on number of Google request.
+
+```{r}
+########################################################################################
+################################### PROBLEM 2 #########################################
+########################################################################################
+```
+
+### Reading the dataset. EDA.
+
+Before dropping any variable, the dataset should be studied by printing the summary and the structure of the dataset. 
+
+```{r}
+google.df <- read.csv("goog.csv")
+
+summary(google.df)
+str(google.df)
+
+pairs(google.df)
+```
+
+The variable "country" looks like redundant; it exists one different index for each country (all countries of the data are different).
+In order to show that, the variables are changed to numeric:
+
+```{r}
+google.df$country <- as.numeric(google.df$country)
+head(google.df)
+```
+
+Effectively, the "country" variable results in a redundancy; thus it must be dropped.
+
+```{r}
+google.df <- google.df[,-1]
+summary(google.df)
+```
+
+### Pairwise correlation plot. Questions.
+
+```{r}
+#install.packages("psych")
+library("psych")
+
+pairs.panels(google.df)
+```
+
+Taking the "complied" as the response variable. Note that correlation is not a casuality fact, if two variables are correlated 0.5 it doesn't mean that increasing the first one the other one will be increased by 0.5
+
+#### Explanatory variable highly correlated positively with response.
+
+It is highly correlated (positively) with request (cor = 0.4). This can be interpreted in such a way that the number of complied request is directly related to the number of requests that Google received for the criminal investigation. The linear relationship between these two variables is moderate.
+
+#### Explanatory variable highly correlated negatively with response.
+
+It is highly correlated (negatively) with freepress. It means that it has a moderate negative linear reltionship.
+
+#### Highest positive correlation between variables.
+
+The highest (positive) correlation is hdi with internet. It may be because there is a linear relationship of a developped country with internet users. 
+The measure of life expectancy usually is lineary related with the development of the countries and the development of the countries usually is related to technology thus, the technology of a country shares a linear relationship with Human Developped Index (hdi).
+
+#### Highest negative correlation between variables.
+
+The highest (negative) correlation is pop with hdi, following the same deduction as the latest section, both variables have a strong downhill linear relationship.
+
+### Fitting a Multiple Linear Regression model. Questions
+
+```{r}
+model.google <- lm(complied ~ . , google.df)
+
+summary(model.google)
+```
+
+#### Most significant explanatory variables
+
+Pop is the most statisticl important variable. It has the higher t-value (thus the lowest Pr(>|t|)) and the lowest standard error. In addition it is the only one with an interval of *
+Another good variables may be hdi (high t-value related with the others) and even complied.
+
+#### Variance explained by the model
+
+R denotes how much variance is explained by the model. The Adjusted R-squared is 0.2343 then this is the variance explained by the model.
+
+#### Performance of the model
+
+By predicting only with the pop variable:
+
+```{r echo=TRUE}
+model.google.pop <- lm(complied ~ pop , google.df)
+
+summary(model.google.pop)
+```
+
+The Adjusted R-squared is highly decreased thus it is necessary using another varible. The variables chosen will be the ones whch have higher t-value (and therefore the fit better the model) being better predictors.
+
+```{r echo=TRUE}
+model.google.pop <- lm(complied ~ pop + hdi, google.df)
+
+summary(model.google.pop)
+```
+
+The Adjusted R-squared obtained is higher than the one with all predictors so the model fits better with these 2 variables. Obviously, the Multiple R-squared is increased with the number of features therefore, with 2 variables will be lower than will all of them (however the interesting R-squared for multiple linear regression y Adjusted R-squares which has been increased).
+The variance explained by the model is equal to 0.334
+In addition, it is considered that the model will not be overfitted with 2 predictors.
+
+### Correlation index between variables.
+
+To obtain the correlation between these two variables, it is necessary changing the "dem" variable to a numeric one.
+
+```{r echo=TRUE}
+new.google.df <- read.csv("goog.csv")
+#cor(new.google.df$complied,new.google.df$dem) It doesn't work, it is not numeric
+
+head(new.google.df$dem)
+unique(new.google.df$dem)
+
+demograp <- new.google.df$dem
+as.numeric(demograp)
+```
+
+Then the correlation will be:
+
+```{r}
+print(cor(new.google.df$complied, as.numeric(demograp)))
+```
+
+## Problem 3. Multiple Linear Regression on NBA players dataset.
+
+```{r}
+########################################################################################
+################################### PROBLEM 3 #########################################
+########################################################################################
+```
+
+### Simple Regression.
+
+First, the csv is read and printed the summary and structure to study its features.
+
+```{r}
+nba <- read.csv("nba.csv")
+summary(nba)
+str(nba)
+```
+
+The non quantitive variables are removed, then the dataframe results:
+
+```{r}
+new.nba <- nba[,8:length(colnames(nba))]
+summary(new.nba)
+```
+
+For the first approach I will choose MIN. Makes sense that more time played should lead in more score points.
+
+```{r}
+########## FIRST APPROACH ##########
+cor(nba["MIN"], nba$PTS)
+cor(nba$MIN,nba$PTS)
+
+model.nba1 <- lm( PTS ~ MIN, new.nba)
+summary(model.nba1)
+```
+
+It is contemplated that the model fits good with this variable, the t-value is pretty high therefore the Pr(>|t|) is small.
+The p-value obtained is small too (order of -16) 
+So this is a good model, but the Adjusted R-squared can be higher, that is the total variance explained by the model.
+
+```{r}
+########## BEST APPROACH ##########
+
+features.nba <- colnames(new.nba)
+
+list.feature <- c()
+list.correlations <- c()
+
+for (i in 1:(length(features.nba)-1)){
+  
+  list.feature[i] <- features.nba[i]
+  list.correlations[i] <- cor(nba[features.nba[i]], nba$PTS)
+
+}
+my.correlations <- data.frame("features" = list.feature, "correlations" = list.correlations)
+print(my.correlations)
+```
+
+The higher correlation is more related with the response and thus, they will explained the model better.
+
+```{r}
+model.nba2 <- lm(new.nba$PTS ~ new.nba$FG, new.nba)
+summary(model.nba2) #The most related variable
+```
+
+This is the predictor which best explain the model, it has the highest t-value; the Adjusted R-squared is close to 1
+Obviously, the score of the player is highly correlated with the Field Goals.
+
+### Visuzalizing and drawing conclusions.
+
+For this section, I will continue with the first variable chosen: MIN.
+
+```{r}
+plot(x = new.nba$MIN, y = new.nba$PTS, main = "Scatterplot of MIN with PTS",
+     xlab = "Minutes played (MIN)", ylab = "Points Scored (PTS)")
+
+abline(lm(new.nba$PTS ~ new.nba$MIN), col="red", lwd=2)
+```
+
+dividing the dataset in two parts:
+
+```{r}
+set.seed(1122) #seed for the pseudo-random number generator
+index <- sample(1:nrow(new.nba), 250) #sample of 250 number between 1 and the total rows
+train <- new.nba[index, ] #training subset
+test <- new.nba[-index, ] #test subset
+```
+
+### Feature selection.
+
+```{r}
+pairs.panels(new.nba)
+```
+
+By using the for loop and the correlation plot, it yields in the most related variables which are:
+FG (1 index), 
+FGA (2 inex),
+MIN (3 index), 
+FT (6 index).
+
+```{r}
+pairs.panels(train[,c(1,2,3,6,16)])
+```
+
+It is showed that MIN, FG and FGA are highly correlated with response, maybe FT variable should be dropped (high difference of correlation).
+
+### Multiple Regression.
+
+The multiple regression model is showed and then the variables that best fit the model are chosen:
+
+```{r}
+model.multiple.nba <- lm(PTS ~ ., train)
+summary(model.multiple.nba)
+```
+
+With all varibles, the model is overfitted (the Adjusted R-squared is equal to 1).
+The variables that has the highest t-value are gonna be kept.
+
+```{r}
+model.multiple.nba1 <- lm(PTS ~ FG + X3P + FT + PF, train)
+summary(model.multiple.nba1)
+```
+
+The model is still overfitted, thus new variable are chosen to perform the model. It must be necessary to remove 2 variables. It will be used the 2 variables with higher t-value.
+
+```{r}
+model.multiple.nba2 <- lm(PTS ~ FG + FT, train)
+summary(model.multiple.nba2)
+```
+
+Now the Adjusted R-squared is not equal to 1 so the model is not overfitted. The total variance explained by the model will be 0.9792 and the predictors are FG and FT.
+
+### Residuals of the model.
+
+```{r}
+plot(model.multiple.nba2,1) #Automatically
+
+plot(model.multiple.nba2$fitted.values, model.multiple.nba2$residuals,  #Manually
+     xlab = "Fitted values of the model", ylab = "Residuals",
+     main = "Residuals vs Fitted")
+```
+
+It looks that there are some data for high fitted values there are some not linearity in data.
+
+### Histograms of residuals.
+
+```{r}
+hist(model.multiple.nba2$residuals, probability = TRUE, main = "Histogram of residuals",
+     xlab = "Residuals", ylab = "Probability")
+lines(density(model.multiple.nba2$residuals), col = "green", lwd=2)
+```
+
+It is showed that it follows a Gaussian distribution
+
+### Fitting the test dataset to the model.
+
+```{r}
+help(predict)
+p <- predict(model.multiple.nba2,test)
+
+table.predicted <- data.frame("predicted" = p, "test" = test$PTS)
+head(table.predicted)
+```
+
+First, the data is in units without decimals, so the predicted will be rounded to obtain the matches with the test (it doesn't exists points with decimals). After that, the table with predicted and test is created.
+
+```{r}
+p.rounded <- round(p, digits = 0)
+
+table.predicted.rounded <- data.frame("predicted" = p.rounded, "test" = test$PTS)
+head(table.predicted.rounded)
+```
+
+Finally, a for loop is made for knowing the total number of fitted values match exactly with the PTS in the test dataset.
+
+```{r}
+cont <- 0
+for (i in 1:nrow(table.predicted.rounded)){
+  if (table.predicted.rounded[i,1] == table.predicted.rounded[i,2]){
+    cont <- cont + 1
+  }
+}
+print(cont) 
+```
+
+Therefore , the total fitted values that match exactly with real ones are 8 (with rounded values).
+
+As it has been said in the professor statement, the comparison must be done with the real values. The same procedure is followed.
+
+```{r}
+table.predicted <- data.frame("predicted" = p, "test" = test$PTS)
+head(table.predicted)
+```
+
+And the for loop:
+
+```{r}
+cont <- 0
+for (i in 1:nrow(table.predicted)){
+  if (table.predicted[i,1] == table.predicted[i,2]){
+    cont <- cont + 1
+  }
+}
+print(cont) 
+```
+
+The total number of values that match exactly are equal to zero.
+
+### Metrics
+
+#### RSS
+
+```{r}
+##### RSS #####
+residuals.nba <- abs(test$PTS - p)
+RSS <- sum(residuals.nba^2)
+print(RSS)
+```
+
+The residual sum of squares is 15.25194.
+
+#### TSS
+
+```{r}
+##### TSS #####
+errors.nba <- abs(mean(test$PTS) - test$PTS)
+TSS <- sum(errors.nba^2)
+print(TSS)
+```
+
+The total sum of squares is 389.7895.
+
+#### F1 statistic
+
+```{r}
+##### F-statistic #####
+predictors <- dim(train)[2]-1 #The target is not included
+n <- dim(train)[1]
+q <- 2 #Number of estimated predictors: FG and FT 
+F.nba <- ((TSS-RSS)/q)/((RSS)/(n-predictors-1))
+print(F.nba)
+```
+
+As F = 2873.135 (F>1), H1 is true. H0 establish that no one predictor is useful to predict th response. As H1 is true, almost 1 is useful.
+
+#### RSE
+
+```{r}
+##### RSE #####
+RSE <- sqrt(RSS/(n - predictors - 1))
+print(RSE)
+```
+
+The Residual Standard Error is equal to 0.2553023
+
