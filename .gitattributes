@@ -2,3 +2,4 @@
 # *.R linguist-detectable=true
 
 # *.js linguist-language=R
+*.rb linguist-language=R
