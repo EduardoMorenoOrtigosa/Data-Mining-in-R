@@ -1,5 +1,5 @@
 *.html linguist-detectable=false
-*.Rmd linguist-detectable=true
+*.rmd linguist-detectable=true
 
-# *.js linguist-language=R
+# *.js linguist-language=Rmd
 
