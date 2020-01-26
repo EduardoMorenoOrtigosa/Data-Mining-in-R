@@ -1,5 +1,5 @@
 *.html linguist-detectable=false
-# *.R linguist-detectable=true
+*.Rmd linguist-detectable=true
 
 # *.js linguist-language=R
-*.rb linguist-language=R
+
