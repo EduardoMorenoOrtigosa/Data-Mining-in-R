@@ -1,4 +1,4 @@
-# Data_Mining
+# Data Mining in R
 Algorithms and models learnt in Data Mining course, CS 422, at IIT. Between them it is included:
 
 1 - Linear Regression. Simple and Multiple Regression.          
